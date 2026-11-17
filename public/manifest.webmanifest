@@ -1,0 +1,52 @@
+{
+  "name": "Finance Radar — I mercati finanziari, sotto controllo",
+  "short_name": "Finance Radar",
+  "description": "Notizie, quotazioni, titoli di Stato, ETF, valute, materie prime, derivati, macro e guida a tutti gli strumenti finanziari, in italiano.",
+  "lang": "it",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b0d10",
+  "theme_color": "#0b0d10",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Mercati",
+      "url": "/mercato"
+    },
+    {
+      "name": "Obbligazioni",
+      "url": "/obbligazioni"
+    },
+    {
+      "name": "Watchlist",
+      "url": "/watchlist"
+    },
+    {
+      "name": "Guida strumenti",
+      "url": "/strumenti"
+    }
+  ]
+}
