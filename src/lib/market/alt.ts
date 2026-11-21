@@ -9,6 +9,19 @@ import type { InstrumentDef } from '../instruments/catalog';
  *  - rendimenti USA: curva ufficiale del Tesoro USA (Treasury Par Yield Curve)
  */
 
+/** Divide una riga CSV rispettando le virgolette (i campi di testo della BCE contengono virgole). */
+function splitCsv(l: string): string[] {
+  const out: string[] = [];
+  let cur = '', q = false;
+  for (const ch of l) {
+    if (ch === '"') q = !q;
+    else if (ch === ',' && !q) { out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+
 export type Bar = [number, number];
 export type Series = { points: Bar[]; source: string };
 
@@ -27,14 +40,14 @@ function memo<T>(ttl: number, fn: () => Promise<T>): () => Promise<T> {
 
 /* ---------------- BCE: cambi di riferimento ---------------- */
 const ecbAll = memo(30 * 60e3, async () => {
-  const csv = await fetchText('https://data-api.ecb.europa.eu/service/data/EXR/D..EUR.SP00.A?lastNObservations=400&format=csvdata', { sourceId: 'ecb-data', timeoutMs: 40000, retries: 1 });
+  const csv = await fetchText('https://data-api.ecb.europa.eu/service/data/EXR/D..EUR.SP00.A?lastNObservations=400&format=csvdata&detail=dataonly', { sourceId: 'ecb-data', timeoutMs: 40000, retries: 1 });
   const lines = csv.trim().split(/\r?\n/);
-  const head = lines[0].split(',');
+  const head = splitCsv(lines[0]);
   const iK = head.indexOf('KEY'), iT = head.indexOf('TIME_PERIOD'), iV = head.indexOf('OBS_VALUE');
   if (iK < 0 || iT < 0 || iV < 0) throw new Error('BCE: formato CSV inatteso');
   const m = new Map<string, Map<string, number>>();
   for (const l of lines.slice(1)) {
-    const c = l.split(',');
+    const c = splitCsv(l);
     const parts = (c[iK] ?? '').split('.');
     const ccy = parts[0] === 'EXR' ? parts[2] : parts[1]; // la chiave può includere il prefisso del dataset
     const v = Number(c[iV]);
@@ -75,9 +88,15 @@ export async function ecbFxSeries(def: InstrumentDef): Promise<Series> {
 /* ---------------- CoinPaprika: cripto ---------------- */
 const CP_ID: Record<string, string> = { btc: 'btc-bitcoin', eth: 'eth-ethereum', sol: 'sol-solana', xrp: 'xrp-xrp', bnb: 'bnb-binance-coin', ada: 'ada-cardano', doge: 'doge-dogecoin' };
 
+/** Serie memorizzate per alcune ore: in modalità server il job gira ogni 5 minuti e il piano gratuito ha una quota mensile. */
+const cpCache = new Map<string, { at: number; s: Series }>();
+const CP_TTL = 6 * 3600e3;
+
 export async function cpSeries(def: InstrumentDef): Promise<Series> {
   const id = CP_ID[def.id];
   if (!id) throw new Error('nessun identificativo CoinPaprika');
+  const hit = cpCache.get(id);
+  if (hit && Date.now() - hit.at < CP_TTL) return hit.s;
   const start = new Date(Date.now() - 360 * 86400e3).toISOString().slice(0, 10);
   const r = await fetchJson<unknown>(`https://api.coinpaprika.com/v1/tickers/${id}/historical?start=${start}&interval=1d&limit=360`, { sourceId: 'coinpaprika', timeoutMs: 20000, retries: 1 });
   if (!Array.isArray(r)) throw new Error('CoinPaprika: ' + ((r as { error?: string })?.error ?? 'risposta non valida').slice(0, 120));
@@ -85,7 +104,9 @@ export async function cpSeries(def: InstrumentDef): Promise<Series> {
     .map((x) => [Date.parse(x.timestamp), Number(x.price)] as Bar)
     .filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]) && p[1] > 0);
   if (!points.length) throw new Error('CoinPaprika: serie vuota');
-  return { points, source: 'CoinPaprika' };
+  const s: Series = { points, source: 'CoinPaprika' };
+  cpCache.set(id, { at: Date.now(), s });
+  return s;
 }
 
 /* ---------------- Tesoro USA: curva dei rendimenti ---------------- */
