@@ -5,7 +5,7 @@
  */
 import { seedSources } from '../src/lib/sources/registry';
 import { runJob, JOBS, jobFrequency } from '../src/lib/scheduler';
-import { run, get } from '../src/lib/db';
+import { run, get, getCache } from '../src/lib/db';
 
 const ORDER = ['quotes', 'news', 'crypto', 'feargreed', 'ecb', 'uscurve', 'worldbank', 'fred', 'series5y', 'breaking', 'translate', 'translate', 'translate', 'ai_auto', 'briefing'];
 
@@ -31,6 +31,13 @@ async function main() {
     const label = 'skipped' in r ? 'saltato (disattivato o senza chiave)' : r.ok ? `ok (${(r as { items?: number }).items ?? 0})` : `ERRORE: ${(r as { error?: string }).error}`;
     console.log(`${id.padEnd(12)} ${label} — ${Date.now() - s} ms`);
   }
+  // riepilogo degli errori di quotazione, raggruppati per motivo (utile per capire quale fonte non risponde)
+  const groups = new Map<string, number>();
+  for (const e of getCache<string[]>('market:quote_errors').value ?? []) {
+    const reason = e.replace(/^[a-z0-9]+: /, '').replace(/\([^)]*\)/g, '').slice(0, 160);
+    groups.set(reason, (groups.get(reason) ?? 0) + 1);
+  }
+  for (const [reason, n] of [...groups.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8)) console.log(`  errore quotazioni x${n}: ${reason}`);
   console.log(`Raccolta completata in ${Math.round((Date.now() - t0) / 1000)} s`);
 }
 

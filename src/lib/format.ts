@@ -6,7 +6,7 @@ const SYM: Record<string, string> = { USD: '$', EUR: '€', GBP: '£', GBp: 'p',
 export function fmtPrice(n: number | null | undefined, q: Q): string {
   if (n == null || !Number.isFinite(n)) return 'n.d.';
   if (q.cls === 'yield') return n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + '%';
-  if (q.cls === 'fx') return n.toLocaleString('it-IT', { minimumFractionDigits: 4, maximumFractionDigits: n >= 100 ? 2 : 4 });
+  if (q.cls === 'fx') { const d = n >= 100 ? 2 : 4; return n.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d }); }
   const abs = Math.abs(n);
   const digits = abs >= 1000 ? 2 : abs >= 1 ? 2 : abs >= 0.01 ? 4 : 6;
   const num = n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: digits });

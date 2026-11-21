@@ -1,0 +1,27 @@
+# Diagnosi temporanea: prova dai server di GitHub quali fonti di quotazioni rispondono (stato HTTP e inizio della risposta).
+name: Diagnosi fonti
+on: workflow_dispatch
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prova le fonti
+        run: |
+          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36'
+          t() { printf '\n=== %s\n' "$1"; curl -sS -m 25 -A "$UA" -H 'Accept: application/json,text/csv,*/*' -w '\nHTTP %{http_code}\n' "${@:2}" 2>&1 | head -c 420; echo; }
+          t "yahoo chart q1 ^GSPC"  "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?range=5d&interval=1d"
+          t "yahoo chart q2 ENI.MI" "https://query2.finance.yahoo.com/v8/finance/chart/ENI.MI?range=5d&interval=1d"
+          t "yahoo spark"           "https://query1.finance.yahoo.com/v7/finance/spark?symbols=%5EGSPC,AAPL&range=5d&interval=1d"
+          t "stooq csv"             "https://stooq.com/q/d/l/?s=%5Espx&i=d"
+          t "stooq.pl csv"          "https://stooq.pl/q/d/l/?s=%5Espx&i=d"
+          t "cnbc quote json"       "https://quote.cnbc.com/quote-html-webservice/restQuote/symbolType/symbol?symbols=.SPX|.FTSEMIB|IT10Y-IT&requestMethod=itv&noform=1&partnerId=2&fund=1&exthrs=1&output=json"
+          t "fred (raggiungibile?)" "https://api.stlouisfed.org/fred/series/observations?series_id=SP500&file_type=json"
+          t "nasdaq api"            "https://api.nasdaq.com/api/quote/AAPL/info?assetclass=stocks"
+          t "tradingview scanner"   -X POST -H 'Content-Type: application/json' -d '{"symbols":{"tickers":["SP:SPX","MIL:FTSEMIB","MIL:ENI"]},"columns":["close","change","name"]}' "https://scanner.tradingview.com/global/scan"
+          t "alphavantage demo"     "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=IBM&apikey=demo"
+          t "twelvedata demo"       "https://api.twelvedata.com/time_series?symbol=AAPL&interval=1day&outputsize=2&apikey=demo"
+          t "fmp demo"              "https://financialmodelingprep.com/api/v3/quote/AAPL?apikey=demo"
+          t "finnhub"               "https://finnhub.io/api/v1/quote?symbol=AAPL&token=demo"
+          t "frankfurter"           "https://api.frankfurter.app/latest?from=EUR&to=USD"
+          t "worldbank"             "https://api.worldbank.org/v2/country/IT/indicator/NY.GDP.MKTP.KD.ZG?format=json&mrv=1"
