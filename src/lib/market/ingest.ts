@@ -2,7 +2,7 @@ import 'server-only';
 import { setCache, setCacheError, getCache } from '../db';
 import { fetchJson } from '../http';
 import { INSTRUMENTS, type InstrumentDef } from '../instruments/catalog';
-import { fetchQuote, fetchLongSeries } from './providers';
+import { fetchQuote, fetchLongSeries, resetYahoo, yahooState, YAHOO_TRIP } from './providers';
 import type { Quote, Series, CryptoCoin, CryptoGlobal } from './types';
 import { markSuccess, markFailure, getSource } from '../sources/registry';
 
@@ -12,61 +12,62 @@ function mark(id: string, ok: boolean, err?: string) {
   else markFailure(id, err ?? 'errore');
 }
 
-async function pool<T, R>(items: T[], n: number, fn: (x: T) => Promise<R>): Promise<R[]> {
-  const out: R[] = new Array(items.length);
-  let i = 0;
-  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => {
-    while (i < items.length) {
-      const k = i++;
-      out[k] = await fn(items[k]);
-    }
-  }));
-  return out;
-}
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const PAUSE_MS = 800; // pausa tra due richieste: Yahoo limita le raffiche
 
 /**
- * Aggiorna le quotazioni di tutto il catalogo. Per ogni strumento: Yahoo → Stooq.
- * Se entrambe falliscono resta l'ultima quotazione valida, marcata con l'errore (mai valori inventati).
+ * Aggiorna le quotazioni di tutto il catalogo, una alla volta (Yahoo blocca le raffiche).
+ * Per ogni strumento si usa la fonte della sua classe (vedi chainFor in providers.ts).
+ * Se tutte falliscono resta l'ultima quotazione valida, marcata con l'errore: mai valori inventati.
  */
 export async function refreshQuotes(filter: (d: InstrumentDef) => boolean = () => true) {
+  resetYahoo();
   const prev = new Map((getCache<Quote[]>('market:quotes').value ?? []).map((q) => [q.id, q]));
   const defs = INSTRUMENTS.filter(filter);
-  let ok = 0, yahooOk = 0, stooqOk = 0;
+  const byId = new Map<string, Quote>();
   const errors: string[] = [];
-  const results = await pool(defs, 4, async (def) => {
+  const okBy: Record<string, number> = {};
+  for (const def of defs) {
     try {
       const { quote, points } = await fetchQuote(def);
       setCache(`series:${def.id}`, { points, source: quote.source } satisfies Series, quote.source);
-      ok++;
-      if (quote.source === 'Yahoo Finance') yahooOk++; else stooqOk++;
-      return quote;
+      byId.set(def.id, quote);
+      okBy[quote.source] = (okBy[quote.source] ?? 0) + 1;
     } catch (e) {
       const msg = (e as Error).message;
       errors.push(`${def.id}: ${msg}`);
       const old = prev.get(def.id);
-      return old ? { ...old, error: msg } : null;
+      if (old) byId.set(def.id, { ...old, error: msg });
     }
-  });
-  const merged = new Map(prev);
-  for (const q of results) if (q) merged.set(q.id, q);
+    if (yahooState.consec429 < YAHOO_TRIP) await sleep(PAUSE_MS);
+  }
+  const ok = Object.values(okBy).reduce((x, y) => x + y, 0);
+  mark('yahoo', (okBy['Yahoo Finance'] ?? 0) > 0, errors.find((e) => /yahoo/i.test(e)));
+  mark('ecb-data', (okBy['BCE (cambi di riferimento)'] ?? 0) > 0);
+  mark('coinpaprika', (okBy['CoinPaprika'] ?? 0) > 0);
+  mark('ustreasury', (okBy['Tesoro USA'] ?? 0) > 0);
   const order = new Map(INSTRUMENTS.map((d, i) => [d.id, i]));
-  const list = [...merged.values()].filter((q) => order.has(q.id)).sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
-  if (yahooOk) mark('yahoo', true); else if (defs.some((d) => d.y)) mark('yahoo', false, errors.find((e) => /yahoo/i.test(e)) ?? 'nessuna risposta');
-  if (stooqOk) mark('stooq', true);
+  const list = [...byId.values()].sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+  // quotazioni non più presenti nel catalogo vengono scartate; quelle non richieste in questa esecuzione restano
+  const kept = [...prev.values()].filter((q) => !byId.has(q.id) && order.has(q.id));
+  const all = [...kept, ...list].sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+  setCache('market:quote_errors', errors.slice(0, 120), 'sistema');
   if (!ok) {
     setCacheError('market:quotes', errors.slice(0, 5).join(' | '));
     throw new Error(`Nessuna quotazione aggiornata: ${errors.slice(0, 3).join(' | ')}`);
   }
-  setCache('market:quotes', list, stooqOk && yahooOk ? 'Yahoo Finance + Stooq' : yahooOk ? 'Yahoo Finance' : 'Stooq');
-  if (errors.length) setCache('market:quote_errors', errors.slice(0, 80), 'sistema');
-  else setCache('market:quote_errors', [], 'sistema');
+  const sources = Object.keys(okBy).join(' + ');
+  setCache('market:quotes', all, sources);
   return ok;
 }
 
-/** Serie a 5 anni (settimanali) per le schede strumento: lente, aggiornate due volte al giorno. */
-export async function refreshLongSeries() {
+/** Serie a 5 anni (settimanali, solo Yahoo) per le schede strumento. Ha un tempo massimo, così non blocca la pubblicazione. */
+export async function refreshLongSeries(maxMs = 6 * 60e3) {
+  resetYahoo();
+  const t0 = Date.now();
   let ok = 0;
-  await pool(INSTRUMENTS, 3, async (def) => {
+  for (const def of INSTRUMENTS) {
+    if (Date.now() - t0 > maxMs || yahooState.consec429 >= YAHOO_TRIP) break;
     try {
       const s = await fetchLongSeries(def);
       setCache(`series5y:${def.id}`, s, s.source);
@@ -74,8 +75,9 @@ export async function refreshLongSeries() {
     } catch (e) {
       setCacheError(`series5y:${def.id}`, (e as Error).message);
     }
-  });
-  if (!ok) throw new Error('Nessuna serie storica a 5 anni disponibile');
+    await sleep(PAUSE_MS);
+  }
+  if (!ok) throw new Error('Nessuna serie storica a 5 anni disponibile (Yahoo limita le richieste o non risponde)');
   return ok;
 }
 

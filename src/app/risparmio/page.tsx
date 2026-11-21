@@ -17,8 +17,8 @@ export default function Risparmio() {
     ['€STR (tasso overnight)', by('estr')?.value, 'Riferimento per conti deposito e ETF monetari'],
     ['Tasso BCE sui depositi', by('dfr')?.value, 'Guida i tassi offerti da banche e conti deposito'],
     ['Euribor 3 mesi', by('euribor3m')?.value, 'Parametro dei mutui a tasso variabile'],
-    ['BTP 2 anni (rendimento lordo)', m.get('btp2y')?.price, 'Fonte Stooq, mercato secondario'],
-    ['BTP 10 anni (rendimento lordo)', m.get('btp10y')?.price, 'Fonte Stooq, mercato secondario'],
+    ['BTP 2 anni (rendimento lordo)', m.get('btp2y')?.price, 'Non disponibile: nessuna fonte gratuita affidabile'],
+    ['BTP 10 anni (rendimento lordo)', m.get('btp10y')?.price, 'Non disponibile: nessuna fonte gratuita affidabile'],
     ['Treasury USA 3 mesi', m.get('ust3m')?.price, 'In dollari: esposto al cambio'],
   ];
   return (

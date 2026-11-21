@@ -10,7 +10,7 @@ type Q = { id: string; name: string; symbol: string; cls: string; ccy: string; p
 const BINANCE: Record<string, string> = { btc: 'BTCUSDT', eth: 'ETHUSDT', sol: 'SOLUSDT', xrp: 'XRPUSDT', bnb: 'BNBUSDT', ada: 'ADAUSDT', doge: 'DOGEUSDT' };
 
 /**
- * Riquadri dei prezzi principali. Dato base: aggiornamento periodico dal server (Yahoo Finance/Stooq, borse ritardate).
+ * Riquadri dei prezzi principali. Dato base: aggiornamento periodico dal server (Yahoo Finance e fonti alternative, borse ritardate).
  * Per le criptovalute, se il browser raggiunge il WebSocket pubblico di Binance, i prezzi diventano in tempo reale.
  */
 export default function LivePrices({ initial, fetchedAt, source }: { initial: Q[]; fetchedAt: string | null; source: string | null }) {

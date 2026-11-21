@@ -15,7 +15,7 @@ export function QuotesByGroup({ title, filter, id }: { title: string; filter: (d
   return (
     <Card id={id} title={title} right={<Freshness fetchedAt={q.fetchedAt} source={q.source} error={q.error} everySec={300} />}>
       {groups.length === 1 ? <QuoteTable quotes={groups[0].list} /> : <Tabs id={id} tabs={groups.map((g) => `${g.group} (${g.list.length}/${g.total})`)} panels={groups.map((g) => <QuoteTable key={g.group} quotes={g.list} />)} />}
-      <p className="border-t border-line px-4 py-2 text-[11px] text-mute">Prezzi delle borse ritardati di circa 15–20 minuti (Yahoo Finance; riserva: Stooq). Le variazioni dei rendimenti sono in punti base (pb). Tocca il nome per la scheda completa con grafico a 5 anni e notizie.</p>
+      <p className="border-t border-line px-4 py-2 text-[11px] text-mute">Prezzi delle borse ritardati di circa 15–20 minuti (Yahoo Finance). Cambi, cripto e curva USA arrivano da BCE, CoinPaprika e Tesoro USA. Le variazioni dei rendimenti sono in punti base (pb). Tocca il nome per la scheda completa con grafico a 5 anni e notizie.</p>
     </Card>
   );
 }

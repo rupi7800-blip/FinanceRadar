@@ -55,7 +55,7 @@ export default function Home() {
       </Card>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <Stat label="Spread BTP–Bund 10 anni" value={spread ? `${spread.now} pb` : 'n.d.'} sub={spread?.change != null ? <span className={spread.change > 0 ? 'down' : 'up'}>{spread.change > 0 ? '+' : ''}{spread.change} pb dal giorno prima</span> : <span className="text-mute">Stooq</span>} href="/obbligazioni" />
+        <Stat label="Spread BTP–Bund 10 anni" value={spread ? `${spread.now} pb` : 'n.d.'} sub={spread?.change != null ? <span className={spread.change > 0 ? 'down' : 'up'}>{spread.change > 0 ? '+' : ''}{spread.change} pb dal giorno prima</span> : <span className="text-mute">in attesa dei dati</span>} href="/obbligazioni" />
         <Stat label="Tasso BCE sui depositi" value={dfr?.value != null ? `${dfr.value.toFixed(2).replace('.', ',')}%` : 'n.d.'} sub={<span className="text-mute">{dfr?.period ? `dal dato del ${dfr.period}` : 'BCE'}</span>} href="/macro" />
         <Stat label="Inflazione area euro" value={hicp?.value != null ? `${hicp.value.toFixed(1).replace('.', ',')}%` : 'n.d.'} sub={<span className="text-mute">{hicp?.period ? `HICP ${hicp.period}` : 'BCE'}</span>} href="/macro" />
         <Stat label="Ampiezza (titoli e indici in rialzo)" value={br ? `${br.pct}%` : 'n.d.'} sub={br ? <span className="text-mute">{br.up} su {br.total} oggi</span> : null} href="/mercato" />

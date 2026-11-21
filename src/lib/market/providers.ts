@@ -1,5 +1,6 @@
 import 'server-only';
-import { fetchJson, fetchText } from '../http';
+import { fetchJson, HttpError } from '../http';
+import { ecbFxSeries, cpSeries, ustSeries, type Series } from './alt';
 import type { InstrumentDef } from '../instruments/catalog';
 import type { Quote } from './types';
 
@@ -7,7 +8,8 @@ import type { Quote } from './types';
  * Fornitori di quotazioni gratuiti e senza chiave.
  *  - Yahoo Finance (endpoint pubblico dei grafici v8): copertura mondiale di azioni, indici, ETF, fondi, cambi, future, cripto.
  *    Dati generalmente ritardati di 15–20 minuti per le borse; endpoint non documentato ufficialmente: se cambia, scatta la riserva.
- *  - Stooq (CSV pubblici): riserva per indici, azioni USA, cambi, metalli e unica fonte per i rendimenti dei titoli di Stato europei.
+ *  - Fonti alternative (alt.ts): BCE per i cambi, CoinPaprika per le cripto, Tesoro USA per la curva dei rendimenti.
+ *    Stooq non è più usata: risponde 403 alle richieste automatiche.
  */
 
 const BROWSER_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
@@ -70,7 +72,7 @@ export function quoteFromSeries(def: InstrumentDef, points: Bar[], o: { price?: 
     volume: o.volume ?? null, exchange: o.exchange ?? null,
     marketTime: time != null ? new Date(time).toISOString() : null,
     sparkline: pts.length > 2 ? downsample(pts.slice(-66).map((p) => p[1]), 40) : null,
-    source: o.source, delayed: def.cls !== 'crypto' && def.cls !== 'fx',
+    source: o.source, delayed: o.source === 'Yahoo Finance',
   };
 }
 
@@ -78,20 +80,37 @@ export function quoteFromSeries(def: InstrumentDef, points: Bar[], o: { price?: 
 type YMeta = { regularMarketPrice?: number; regularMarketTime?: number; regularMarketVolume?: number; fullExchangeName?: string; exchangeName?: string; currency?: string };
 type YChart = {
   chart: {
-    result: {
-      meta: YMeta;
-      timestamp?: number[];
-      indicators: { quote: { close: (number | null)[] }[]; adjclose?: { adjclose: (number | null)[] }[] };
-    }[] | null;
+    result: { meta: YMeta; timestamp?: number[]; indicators: { quote: { close: (number | null)[] }[] } }[] | null;
     error: { code: string; description: string } | null;
   };
 };
 
-export async function yahooChart(symbol: string, range: string, interval: string): Promise<{ points: Bar[]; meta: YMeta }> {
-  const host = Math.random() < 0.5 ? 'query1' : 'query2';
-  const r = await fetchJson<YChart>(`https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}&includePrePost=false&events=div%2Csplit`, {
-    sourceId: 'yahoo', headers: { 'User-Agent': BROWSER_UA }, timeoutMs: 15000, retries: 1,
+/** Interruttore: dopo 4 errori 429 consecutivi Yahoo viene saltato per il resto dell'esecuzione (si usano le alternative). */
+export const yahooState = { consec429: 0 };
+export const YAHOO_TRIP = 4;
+export function resetYahoo() { yahooState.consec429 = 0; }
+
+async function yahooGet(host: string, symbol: string, range: string, interval: string) {
+  return fetchJson<YChart>(`https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}&includePrePost=false&events=div%2Csplit`, {
+    sourceId: 'yahoo', headers: { 'User-Agent': BROWSER_UA }, timeoutMs: 12000, retries: 0,
   });
+}
+
+export async function yahooChart(symbol: string, range: string, interval: string): Promise<{ points: Bar[]; meta: YMeta }> {
+  if (yahooState.consec429 >= YAHOO_TRIP) throw new Error('Yahoo: sospeso per questa esecuzione dopo ripetuti 429');
+  let r: YChart;
+  try {
+    try {
+      r = await yahooGet('query1', symbol, range, interval);
+    } catch (e) {
+      if (!(e instanceof HttpError && e.status === 429)) throw e;
+      r = await yahooGet('query2', symbol, range, interval); // secondo host prima di contare il 429
+    }
+    yahooState.consec429 = 0;
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 429) yahooState.consec429++;
+    throw e;
+  }
   const res = r.chart?.result?.[0];
   if (!res) throw new Error(`Yahoo: ${r.chart?.error?.description ?? 'nessun dato'} (${symbol})`);
   const ts = res.timestamp ?? [];
@@ -112,57 +131,32 @@ export async function yahooQuote(def: InstrumentDef): Promise<{ quote: Quote; po
   return { quote, points };
 }
 
-/* ---------------- Stooq (CSV) ---------------- */
-function parseStooqDaily(csv: string): Bar[] {
-  const lines = csv.trim().split(/\r?\n/);
-  if (!/^date/i.test(lines[0] ?? '')) throw new Error('Stooq: formato inatteso' + (/no data|n\/d/i.test(csv) ? ' (nessun dato)' : ''));
-  const out: Bar[] = [];
-  for (const l of lines.slice(1)) {
-    const [d, , , , c] = l.split(',');
-    const v = Number(c);
-    const t = Date.parse(d + 'T21:00:00Z');
-    if (Number.isFinite(v) && Number.isFinite(t)) out.push([t, v]);
-  }
-  return out;
+async function fromAlt(def: InstrumentDef, s: Series): Promise<{ quote: Quote; points: Bar[] }> {
+  const quote = quoteFromSeries(def, s.points, { source: s.source, symbol: def.id.toUpperCase() });
+  return { quote, points: s.points };
 }
 
-export async function stooqDaily(symbol: string, fromDays = 400): Promise<Bar[]> {
-  const d1 = new Date(Date.now() - fromDays * DAY).toISOString().slice(0, 10).replace(/-/g, '');
-  const csv = await fetchText(`https://stooq.com/q/d/l/?s=${encodeURIComponent(symbol)}&i=d&d1=${d1}`, { sourceId: 'stooq', timeoutMs: 15000, retries: 1 });
-  const pts = parseStooqDaily(csv);
-  if (!pts.length) throw new Error(`Stooq: serie vuota (${symbol})`);
-  return pts;
+/** Catena di fonti per classe: la prima che risponde vince; le altre sono riserva. */
+function chainFor(def: InstrumentDef): ((d: InstrumentDef) => Promise<{ quote: Quote; points: Bar[] }>)[] {
+  if (def.cls === 'crypto') return [async (d) => fromAlt(d, await cpSeries(d)), yahooQuote];
+  if (def.cls === 'fx') return [async (d) => fromAlt(d, await ecbFxSeries(d)), yahooQuote];
+  if (def.id.startsWith('ust')) return [async (d) => fromAlt(d, await ustSeries(d))];
+  return [yahooQuote];
 }
 
-export async function stooqQuote(def: InstrumentDef): Promise<{ quote: Quote; points: Bar[] }> {
-  if (!def.s) throw new Error('nessun simbolo Stooq');
-  const points = await stooqDaily(def.s);
-  return { quote: quoteFromSeries(def, points, { source: 'Stooq', symbol: def.s.toUpperCase() }), points };
-}
-
-/** Prova Yahoo, poi Stooq. Ritorna anche la serie giornaliera di un anno (per grafici e calcoli). */
+/** Quotazione con la prima fonte disponibile. Ritorna anche la serie giornaliera (1 anno). */
 export async function fetchQuote(def: InstrumentDef): Promise<{ quote: Quote; points: Bar[] }> {
   const errors: string[] = [];
-  if (def.y) {
-    try { return await yahooQuote(def); } catch (e) { errors.push((e as Error).message); }
-  }
-  if (def.s) {
-    try { return await stooqQuote(def); } catch (e) { errors.push((e as Error).message); }
+  for (const fn of chainFor(def)) {
+    try { return await fn(def); } catch (e) { errors.push((e as Error).message); }
   }
   throw new Error(errors.join(' | ') || 'nessuna fonte disponibile');
 }
 
-/** Serie lunga (5 anni, settimanale) per la scheda strumento. */
+/** Serie lunga (5 anni, settimanale) per la scheda strumento. Solo Yahoo: con limiti rispettati e interruttore. */
 export async function fetchLongSeries(def: InstrumentDef): Promise<{ points: Bar[]; source: string }> {
-  if (def.y) {
-    try {
-      const { points } = await yahooChart(def.y, '5y', '1wk');
-      if (points.length > 10) return { points, source: 'Yahoo Finance' };
-    } catch { /* riserva */ }
-  }
-  if (def.s) {
-    const pts = await stooqDaily(def.s, 5 * 366);
-    return { points: pts.filter((_, i) => i % 5 === 0 || i === pts.length - 1), source: 'Stooq' };
-  }
-  throw new Error('serie lunga non disponibile');
+  if (!def.y) throw new Error('serie lunga non disponibile');
+  const { points } = await yahooChart(def.y, '5y', '1wk');
+  if (points.length < 10) throw new Error('serie lunga troppo corta');
+  return { points, source: 'Yahoo Finance' };
 }

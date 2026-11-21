@@ -118,7 +118,7 @@ export async function refreshWorldBank() {
   const table: Record<string, { name: string; gdp?: [number, string]; cpi?: [number, string]; unemp?: [number, string]; debt?: [number, string] }> = {};
   for (const [code, k] of ind) {
     const r = await fetchJson<[unknown, { country: { id: string; value: string }; countryiso3code: string; date: string; value: number | null }[] | null]>(
-      `https://api.worldbank.org/v2/country/${countries}/indicator/${code}?format=json&mrv=1&per_page=100`, { sourceId: 'worldbank', timeoutMs: 25000 },
+      `https://api.worldbank.org/v2/country/${countries}/indicator/${code}?format=json&mrv=1&per_page=100`, { sourceId: 'worldbank', timeoutMs: 60000 },
     );
     for (const o of r[1] ?? []) {
       if (o.value == null) continue;

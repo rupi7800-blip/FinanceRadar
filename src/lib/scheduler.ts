@@ -16,7 +16,7 @@ type Job = { id: string; label: string; every: number; dataSource?: string; enab
 
 export const JOBS: Job[] = [
   { id: 'news', label: 'Notizie (RSS di testate, banche centrali, autorità)', every: 60, fn: async () => (await ingestDueSources()).reduce((s, r) => s + r.items, 0) },
-  { id: 'quotes', label: 'Quotazioni di tutti gli strumenti (Yahoo → Stooq)', every: 300, fn: async () => {
+  { id: 'quotes', label: 'Quotazioni di tutti gli strumenti (Yahoo, BCE, CoinPaprika, Tesoro USA)', every: 300, fn: async () => {
     const n = await refreshQuotes();
     if (!getSetting<boolean>('instrument_index_ready', false)) { reclassifyRecent(); setSetting('instrument_index_ready', true); }
     return n;

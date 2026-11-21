@@ -1,6 +1,6 @@
 /**
  * Catalogo degli strumenti quotati monitorati (condiviso server/client).
- * Ogni voce indica il simbolo Yahoo Finance (fonte primaria, dati ritardati) e, dove esiste, il simbolo Stooq (fonte di riserva).
+ * Ogni voce indica il simbolo Yahoo Finance (fonte primaria, dati ritardati) e, dove esiste, il simbolo Stooq (non più usato: risponde 403).
  * Il catalogo si estende aggiungendo righe: nessun'altra modifica al codice è necessaria.
  *
  * cls (classe di strumento) → determina la sezione, il formato del prezzo e le regole di anomalia.

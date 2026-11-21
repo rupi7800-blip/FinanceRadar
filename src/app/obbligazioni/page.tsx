@@ -30,7 +30,7 @@ export default function Obbligazioni() {
               <LineChart points={sp.hist} height={160} />
               <p className="mt-1 text-[11px] text-mute">Differenza tra i rendimenti a 10 anni di Italia e Germania (1 punto base = 0,01%). Misura il premio chiesto dal mercato per il rischio Italia. Ultimo anno, chiusure giornaliere.</p>
             </div>
-          ) : <Empty>Spread non disponibile: servono i rendimenti di BTP e Bund (fonte Stooq).</Empty>}
+          ) : <Empty>Spread non disponibile: i rendimenti giornalieri di BTP e Bund non hanno ancora una fonte gratuita affidabile (vedi Fonti).</Empty>}
         </Card>
         <Card title="Spread verso il Bund (10 anni)">
           {bund != null ? <ul className="divide-y divide-line text-sm">{spreads.map(([id, l]) => { const v = m.get(id)?.price; return <li key={id} className="flex justify-between px-4 py-2"><span>{l}</span><span className="tabular-nums">{v != null ? `${Math.round((v - bund) * 100)} pb` : 'n.d.'}</span></li>; })}</ul> : <Empty>n.d.</Empty>}

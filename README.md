@@ -37,7 +37,7 @@ Il workflow `.github/workflows/pages.yml` ogni 30 minuti raccoglie notizie e quo
 2. (Consigliato) **Settings → Secrets and variables → Actions → New repository secret**: `CONTACT_EMAIL`, `FRED_API_KEY`, `MYMEMORY_EMAIL` e almeno una chiave AI (`GEMINI_API_KEY` o `GROQ_API_KEY` hanno piani gratuiti; oppure `ANTHROPIC_API_KEY`).
 3. **Actions → "Pubblica su GitHub Pages" → Run workflow** per la prima pubblicazione (poi parte da sola).
 
-**Nessuna chiave a pagamento è necessaria**: quotazioni (Yahoo Finance → Stooq), BCE, Tesoro USA, Banca Mondiale e CoinPaprika sono gratuiti e senza registrazione. FRED è gratuita con registrazione.
+**Nessuna chiave a pagamento è necessaria**: quotazioni (Yahoo Finance, BCE, CoinPaprika, Tesoro USA), Banca Mondiale e Alternative.me sono gratuiti e senza registrazione. FRED è gratuita con registrazione.
 
 GitHub Pages da un repository **privato** richiede un piano a pagamento; con un repository pubblico è gratuito, così come i minuti di Actions. Con un repository privato riduci la frequenza (riga `cron` del workflow, es. `'7 */3 * * *'`).
 
@@ -80,7 +80,7 @@ Tutte le funzioni (admin, push in background, AI su richiesta, aggiornamento con
 | **Guida agli strumenti** | 52 strumenti spiegati (conti e buoni postali, BOT/BTP/CCT, corporate, high yield, subordinate, azioni, fondi, ETF, ETC/ETN, ELTIF, PIR, fondi pensione, polizze, future, opzioni, certificati, CFD, swap, forex, oro, immobili, private equity, crowdfunding, cripto…): cos'è, come funziona, rischio, costi, **tasse in Italia**, dove si compra |
 | **Scheda strumento** | Prezzo, variazioni, range, volatilità e massimo ribasso a 1 anno, grafico 1M–5A, notizie collegate, strumenti simili |
 
-Il catalogo strumenti (`src/lib/instruments/catalog.ts`) si estende aggiungendo una riga con simbolo Yahoo e/o Stooq.
+Il catalogo strumenti (`src/lib/instruments/catalog.ts`) si estende aggiungendo una riga con il simbolo Yahoo; cambi, cripto e curva USA usano le fonti alternative in `src/lib/market/alt.ts`.
 
 ---
 
@@ -112,7 +112,7 @@ Elenco completo con livello di affidabilità, gruppo editoriale, conflitti d'int
 **Autorità:** SEC, CFTC, ESMA, FCA; tutela investitori: SEC litigation releases, provvedimenti CFTC.
 **Esperti:** Aswath Damodaran, Liberty Street Economics (Fed di New York), VoxEU/CEPR, lavoce.info, Econopoly, Calculated Risk, Lyn Alden, Ben Carlson, Barry Ritholtz, Noah Smith, Apricitas Economics, Joachim Klement, Marginal Revolution.
 **Community (mai usata come conferma):** Reddit r/investing, r/stocks, r/ItaliaPersonalFinance.
-**Dati:** Yahoo Finance (quotazioni mondiali, ritardate) → Stooq (riserva automatica e rendimenti dei titoli di Stato europei); BCE Data Portal (tassi, €STR, Euribor, HICP, curva euro, cambi di riferimento); Tesoro USA (curva Treasury); Banca Mondiale (indicatori per Paese); FRED (con chiave gratuita); CoinPaprika e Alternative.me (cripto); Binance WebSocket (prezzi cripto live nel browser).
+**Dati:** Yahoo Finance (azioni, indici, ETF, materie prime, ritardate); BCE Data Portal per i cambi di riferimento (EXR); CoinPaprika per le cripto (storico di circa 12 mesi); Tesoro USA per la curva dei rendimenti; BCE Data Portal (tassi, €STR, Euribor, HICP, curva euro, cambi di riferimento); Tesoro USA (curva Treasury); Banca Mondiale (indicatori per Paese); FRED (con chiave gratuita); CoinPaprika e Alternative.me (cripto); Binance WebSocket (prezzi cripto live nel browser).
 
 ### Valutate e non integrate (motivo)
 | Servizio | Motivo |
@@ -127,7 +127,7 @@ Elenco completo con livello di affidabilità, gruppo editoriale, conflitti d'int
 | Morningstar (rating fondi) | dati proprietari a pagamento |
 | X/Twitter, Telegram | API a pagamento o monitoraggio di canali di terzi non consentito |
 
-Yahoo Finance espone un endpoint pubblico per i grafici che non è documentato ufficialmente: per questo ogni quotazione ha la riserva Stooq e il fallimento di un singolo simbolo non blocca gli altri.
+Yahoo Finance espone un endpoint pubblico per i grafici che non è documentato ufficialmente: per questo le richieste sono sequenziali e un interruttore la esclude dopo ripetuti 429; cambi, cripto e curva USA dipendono da fonti separate.
 
 ---
 
@@ -136,9 +136,9 @@ Yahoo Finance espone un endpoint pubblico per i grafici che non è documentato u
 ```
 src/
   lib/
-    instruments/catalog.ts  216 strumenti: simboli Yahoo/Stooq, classe, gruppo, Paese, valuta, alias per le notizie
+    instruments/catalog.ts  216 strumenti: simboli Yahoo, classe, gruppo, Paese, valuta, alias per le notizie
     instruments/guide.ts    guida a 52 strumenti finanziari (contenuto editoriale)
-    market/                 fornitori (Yahoo → Stooq), calcolo variazioni, serie 1 anno e 5 anni, anomalie, spread
+    market/                 fornitori per classe (Yahoo, BCE, CoinPaprika, Tesoro USA), calcolo variazioni, serie 1 anno e 5 anni, anomalie, spread
     macro/                  BCE, Tesoro USA, Banca Mondiale, FRED
     classify.ts             sezioni, strumenti citati, segnali (urgente, indiscrezione, smentita, previsione, sponsorizzato)
     reliability.ts          stati CONFERMATA / PARZIALE / NON VERIFICATA / SMENTITA con motivazioni

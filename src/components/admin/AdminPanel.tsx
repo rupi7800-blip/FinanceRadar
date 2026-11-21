@@ -177,7 +177,7 @@ function Jobs({ jobs, act }: { jobs: Job[]; act: Act }) {
           </tbody>
         </table>
       </div>
-      <p className="px-4 py-2 text-[11px] text-mute">Frequenze minime consigliate per rispettare i limiti gratuiti: quotazioni (Yahoo/Stooq) ≥ 300 s; BCE e Tesoro USA ≥ 3 ore; CoinPaprika ≥ 300 s. Ogni fonte di notizie ha inoltre una propria frequenza (scheda Fonti).</p>
+      <p className="px-4 py-2 text-[11px] text-mute">Frequenze minime consigliate per rispettare i limiti gratuiti: quotazioni (Yahoo, una richiesta alla volta) ≥ 300 s; BCE e Tesoro USA ≥ 3 ore; CoinPaprika ≥ 300 s. Ogni fonte di notizie ha inoltre una propria frequenza (scheda Fonti).</p>
     </div>
   );
 }
