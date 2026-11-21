@@ -39,7 +39,9 @@ export async function refreshQuotes(filter: (d: InstrumentDef) => boolean = () =
       const old = prev.get(def.id);
       if (old) byId.set(def.id, { ...old, error: msg });
     }
-    if (yahooState.consec429 < YAHOO_TRIP) await sleep(PAUSE_MS);
+    // la pausa serve solo a Yahoo: BCE, CoinPaprika e Tesoro USA scaricano un blocco unico
+    const usesYahoo = !!def.y && def.cls !== 'crypto' && def.cls !== 'fx' && !def.id.startsWith('ust');
+    if (usesYahoo && yahooState.consec429 < YAHOO_TRIP) await sleep(PAUSE_MS);
   }
   const ok = Object.values(okBy).reduce((x, y) => x + y, 0);
   mark('yahoo', (okBy['Yahoo Finance'] ?? 0) > 0, errors.find((e) => /yahoo/i.test(e)));
@@ -63,7 +65,6 @@ export async function refreshQuotes(filter: (d: InstrumentDef) => boolean = () =
 
 /** Serie a 5 anni (settimanali, solo Yahoo) per le schede strumento. Ha un tempo massimo, così non blocca la pubblicazione. */
 export async function refreshLongSeries(maxMs = 6 * 60e3) {
-  resetYahoo();
   const t0 = Date.now();
   let ok = 0;
   for (const def of INSTRUMENTS) {

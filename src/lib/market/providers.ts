@@ -72,7 +72,7 @@ export function quoteFromSeries(def: InstrumentDef, points: Bar[], o: { price?: 
     volume: o.volume ?? null, exchange: o.exchange ?? null,
     marketTime: time != null ? new Date(time).toISOString() : null,
     sparkline: pts.length > 2 ? downsample(pts.slice(-66).map((p) => p[1]), 40) : null,
-    source: o.source, delayed: o.source === 'Yahoo Finance',
+    source: o.source, delayed: true, // nessuna fonte gratuita è in tempo reale (borse ~15–20 min; BCE, CoinPaprika e Tesoro: chiusure giornaliere)
   };
 }
 
@@ -109,6 +109,7 @@ export async function yahooChart(symbol: string, range: string, interval: string
     yahooState.consec429 = 0;
   } catch (e) {
     if (e instanceof HttpError && e.status === 429) yahooState.consec429++;
+    else yahooState.consec429 = 0; // il contatore conta solo 429 consecutivi
     throw e;
   }
   const res = r.chart?.result?.[0];

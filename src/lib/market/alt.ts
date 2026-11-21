@@ -35,7 +35,8 @@ const ecbAll = memo(30 * 60e3, async () => {
   const m = new Map<string, Map<string, number>>();
   for (const l of lines.slice(1)) {
     const c = l.split(',');
-    const ccy = c[iK]?.split('.')[2];
+    const parts = (c[iK] ?? '').split('.');
+    const ccy = parts[0] === 'EXR' ? parts[2] : parts[1]; // la chiave può includere il prefisso del dataset
     const v = Number(c[iV]);
     if (!ccy || !Number.isFinite(v)) continue;
     if (!m.has(ccy)) m.set(ccy, new Map());
@@ -91,8 +92,10 @@ export async function cpSeries(def: InstrumentDef): Promise<Series> {
 const ustRows = memo(30 * 60e3, async () => {
   const y = new Date().getUTCFullYear();
   const rows: { date: number; vals: Record<string, number> }[] = [];
+  const errs: string[] = [];
   for (const year of [y - 1, y]) {
-    const csv = await fetchText(`https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/${year}/all?type=daily_treasury_yield_curve&field_tdr_date_value=${year}&page&_format=csv`, { sourceId: 'ustreasury', timeoutMs: 30000, retries: 1 });
+    let csv: string;
+    try { csv = await fetchText(`https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/${year}/all?type=daily_treasury_yield_curve&field_tdr_date_value=${year}&page&_format=csv`, { sourceId: 'ustreasury', timeoutMs: 30000, retries: 1 }); } catch (e) { errs.push((e as Error).message); continue; } // un anno mancante non azzera la serie
     const lines = csv.trim().split(/\r?\n/);
     const head = lines[0].split(',').map((h) => h.replace(/"/g, '').trim());
     for (const l of lines.slice(1)) {
@@ -104,7 +107,7 @@ const ustRows = memo(30 * 60e3, async () => {
       rows.push({ date: Date.UTC(yy, mm - 1, dd, 21), vals });
     }
   }
-  if (!rows.length) throw new Error('Tesoro USA: nessun dato');
+  if (!rows.length) throw new Error('Tesoro USA: nessun dato' + (errs.length ? ` (${errs[0]})` : ''));
   return rows.sort((a, b) => a.date - b.date);
 });
 
