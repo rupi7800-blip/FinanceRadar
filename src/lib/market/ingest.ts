@@ -52,7 +52,8 @@ export async function refreshQuotes(filter: (d: InstrumentDef) => boolean = () =
   mark('coinpaprika', (okBy['CoinPaprika'] ?? 0) > 0);
   mark('ustreasury', (okBy['Tesoro USA'] ?? 0) > 0);
   if (process.env.FRED_API_KEY) mark('fred', (okBy['FRED (chiusura giornaliera)'] ?? 0) > 0);
-  if (process.env.TWELVEDATA_API_KEY) mark('twelvedata', (okBy['Twelve Data (chiusura giornaliera)'] ?? 0) > 0);
+  // la fonte si segna solo se almeno una richiesta è stata tentata (con piano vuoto o tetto raggiunto non si cambia stato)
+  if (process.env.TWELVEDATA_API_KEY && ((okBy['Twelve Data (chiusura giornaliera)'] ?? 0) > 0 || errors.some((e) => e.includes('Twelve Data')))) mark('twelvedata', (okBy['Twelve Data (chiusura giornaliera)'] ?? 0) > 0, errors.find((e) => e.includes('Twelve Data')));
   const order = new Map(INSTRUMENTS.map((d, i) => [d.id, i]));
   const list = [...byId.values()].sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
   // quotazioni non più presenti nel catalogo vengono scartate; quelle non richieste in questa esecuzione restano

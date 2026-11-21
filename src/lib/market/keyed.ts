@@ -1,5 +1,5 @@
 import 'server-only';
-import { fetchJson } from '../http';
+import { fetchJson, HttpError } from '../http';
 import { getCache, setCache } from '../db';
 import type { InstrumentDef } from '../instruments/catalog';
 import type { Bar, Series } from './alt';
@@ -17,6 +17,13 @@ export class NotScheduled extends Error {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Toglie dai messaggi eventuali valori delle chiavi API, prima che finiscano in cache o nei log. */
+function clean(msg: string): string {
+  let m = msg;
+  for (const k of [process.env.FRED_API_KEY, process.env.TWELVEDATA_API_KEY]) if (k && k.length > 3) m = m.split(k).join('***');
+  return m;
+}
 
 /* ---------------- FRED ---------------- */
 const FRED_ID: Record<string, string> = {
@@ -38,7 +45,7 @@ export async function fredSeries(def: InstrumentDef): Promise<Series> {
     `https://api.stlouisfed.org/fred/series/observations?series_id=${id}&api_key=${encodeURIComponent(key)}&file_type=json&observation_start=${start}`,
     { sourceId: 'fred', timeoutMs: 20000, retries: 1 },
   );
-  if (!r.observations) throw new Error('FRED: ' + (r.error_message ?? 'risposta non valida').slice(0, 120));
+  if (!r.observations) throw new Error(clean('FRED: ' + (r.error_message ?? 'risposta non valida')).slice(0, 140));
   const points = r.observations.filter((o) => o.value !== '.').map((o) => [Date.parse(o.date + 'T21:00:00Z'), Number(o.value)] as Bar).filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]));
   if (!points.length) throw new Error('FRED: serie vuota');
   const s: Series = { points, source: 'FRED (chiusura giornaliera)' };
@@ -97,18 +104,25 @@ export async function tdSeries(def: InstrumentDef): Promise<Series> {
   const wait = lastCall + 7500 - Date.now(); // limite gratuito: 8 richieste al minuto
   if (wait > 0) await sleep(wait);
   lastCall = Date.now();
-  const r = await fetchJson<{ status?: string; code?: number; message?: string; values?: { datetime: string; close: string }[] }>(
-    `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(sym)}&interval=1day&outputsize=260&apikey=${encodeURIComponent(key)}`,
-    { sourceId: 'twelvedata', timeoutMs: 20000, retries: 0 },
-  );
+  const markBad = () => {
+    const s2 = tdState();
+    s2.bad[def.id] = Date.now(); // non coperto dal piano gratuito: non si riprova per 7 giorni
+    setCache('td:state', s2, 'Twelve Data');
+  };
+  let r: { status?: string; code?: number; message?: string; values?: { datetime: string; close: string }[] };
+  try {
+    r = await fetchJson(`https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(sym)}&interval=1day&outputsize=260&apikey=${encodeURIComponent(key)}`, { sourceId: 'twelvedata', timeoutMs: 20000, retries: 0 });
+  } catch (e) {
+    // risposta con stato HTTP di errore (il corpo non viene letto da fetchJson)
+    if (e instanceof HttpError && e.status === 429) { plan = new Set(); throw new Error('Twelve Data: limite di richieste raggiunto'); }
+    if (e instanceof HttpError && [400, 403, 404].includes(e.status)) markBad();
+    throw new Error(clean(`Twelve Data: ${(e as Error).message} (${sym})`).slice(0, 160));
+  }
   if (r.status === 'error' || !Array.isArray(r.values)) {
+    // Twelve Data può rispondere anche con HTTP 200 e un errore nel corpo
     if (r.code === 429) { plan = new Set(); throw new Error('Twelve Data: limite di richieste raggiunto'); }
-    if (r.code === 400 || r.code === 403 || r.code === 404) {
-      const s2 = tdState();
-      s2.bad[def.id] = Date.now(); // non coperto dal piano gratuito: non si riprova per 7 giorni
-      setCache('td:state', s2, 'Twelve Data');
-    }
-    throw new Error(`Twelve Data: ${String(r.message ?? 'risposta non valida').slice(0, 120)} (${sym})`);
+    if (r.code === 400 || r.code === 403 || r.code === 404) markBad();
+    throw new Error(clean(`Twelve Data: ${String(r.message ?? 'risposta non valida')} (${sym})`).slice(0, 160));
   }
   const points = r.values
     .map((v) => [Date.parse(v.datetime.slice(0, 10) + 'T21:00:00Z'), Number(v.close)] as Bar)
