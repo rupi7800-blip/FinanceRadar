@@ -3,6 +3,7 @@ import { setCache, setCacheError, getCache } from '../db';
 import { fetchJson } from '../http';
 import { INSTRUMENTS, type InstrumentDef } from '../instruments/catalog';
 import { fetchQuote, fetchLongSeries, resetYahoo, yahooState, YAHOO_TRIP } from './providers';
+import { planTwelveData, NotScheduled } from './keyed';
 import type { Quote, Series, CryptoCoin, CryptoGlobal } from './types';
 import { markSuccess, markFailure, getSource } from '../sources/registry';
 
@@ -22,6 +23,7 @@ const PAUSE_MS = 800; // pausa tra due richieste: Yahoo limita le raffiche
  */
 export async function refreshQuotes(filter: (d: InstrumentDef) => boolean = () => true) {
   resetYahoo();
+  planTwelveData(INSTRUMENTS.filter(filter));
   const prev = new Map((getCache<Quote[]>('market:quotes').value ?? []).map((q) => [q.id, q]));
   const defs = INSTRUMENTS.filter(filter);
   const byId = new Map<string, Quote>();
@@ -34,6 +36,7 @@ export async function refreshQuotes(filter: (d: InstrumentDef) => boolean = () =
       byId.set(def.id, quote);
       okBy[quote.source] = (okBy[quote.source] ?? 0) + 1;
     } catch (e) {
+      if (e instanceof NotScheduled) { const old = prev.get(def.id); if (old) byId.set(def.id, old); continue; }
       const msg = (e as Error).message;
       errors.push(`${def.id}: ${msg}`);
       const old = prev.get(def.id);
@@ -48,6 +51,8 @@ export async function refreshQuotes(filter: (d: InstrumentDef) => boolean = () =
   mark('ecb-data', (okBy['BCE (cambi di riferimento)'] ?? 0) > 0);
   mark('coinpaprika', (okBy['CoinPaprika'] ?? 0) > 0);
   mark('ustreasury', (okBy['Tesoro USA'] ?? 0) > 0);
+  if (process.env.FRED_API_KEY) mark('fred', (okBy['FRED (chiusura giornaliera)'] ?? 0) > 0);
+  if (process.env.TWELVEDATA_API_KEY) mark('twelvedata', (okBy['Twelve Data (chiusura giornaliera)'] ?? 0) > 0);
   const order = new Map(INSTRUMENTS.map((d, i) => [d.id, i]));
   const list = [...byId.values()].sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
   // quotazioni non più presenti nel catalogo vengono scartate; quelle non richieste in questa esecuzione restano

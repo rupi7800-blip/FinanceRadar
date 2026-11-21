@@ -1,6 +1,7 @@
 import 'server-only';
 import { fetchJson, HttpError } from '../http';
 import { ecbFxSeries, cpSeries, ustSeries, type Series } from './alt';
+import { fredSeries, fredCovers, tdSeries, tdCovers, NotScheduled } from './keyed';
 import type { InstrumentDef } from '../instruments/catalog';
 import type { Quote } from './types';
 
@@ -142,6 +143,8 @@ function chainFor(def: InstrumentDef): ((d: InstrumentDef) => Promise<{ quote: Q
   if (def.cls === 'crypto') return [async (d) => fromAlt(d, await cpSeries(d)), yahooQuote];
   if (def.cls === 'fx') return [async (d) => fromAlt(d, await ecbFxSeries(d)), yahooQuote];
   if (def.id.startsWith('ust')) return [async (d) => fromAlt(d, await ustSeries(d))];
+  if (fredCovers(def)) return [async (d) => fromAlt(d, await fredSeries(d)), yahooQuote];
+  if (tdCovers(def)) return [async (d) => fromAlt(d, await tdSeries(d)), yahooQuote];
   return [yahooQuote];
 }
 
@@ -149,7 +152,10 @@ function chainFor(def: InstrumentDef): ((d: InstrumentDef) => Promise<{ quote: Q
 export async function fetchQuote(def: InstrumentDef): Promise<{ quote: Quote; points: Bar[] }> {
   const errors: string[] = [];
   for (const fn of chainFor(def)) {
-    try { return await fn(def); } catch (e) { errors.push((e as Error).message); }
+    try { return await fn(def); } catch (e) {
+      if (e instanceof NotScheduled) throw e; // rotazione: si tiene l'ultimo valore, senza provare Yahoo né segnalare errore
+      errors.push((e as Error).message);
+    }
   }
   throw new Error(errors.join(' | ') || 'nessuna fonte disponibile');
 }

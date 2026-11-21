@@ -23,7 +23,7 @@ export function seedSources() {
     );
   }
   // le API opzionali si attivano da sole quando la chiave è presente
-  const keyed: Record<string, string> = { fred: 'FRED_API_KEY' };
+  const keyed: Record<string, string> = { fred: 'FRED_API_KEY', twelvedata: 'TWELVEDATA_API_KEY' };
   for (const [id, env] of Object.entries(keyed)) {
     if (process.env[env]) run("UPDATE sources SET enabled = 1 WHERE id = ? AND status = 'unknown'", id);
   }

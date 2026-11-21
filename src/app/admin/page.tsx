@@ -20,6 +20,7 @@ const ENV_KEYS: [string, string, string][] = [
   ['ADMIN_PASSWORD', 'Password area amministrativa (min 10 caratteri)', 'obbligatoria'],
   ['SESSION_SECRET', 'Segreto firma sessioni (≥ 32 caratteri)', 'consigliata (altrimenti generata e salvata nel DB)'],
   ['CRON_SECRET', 'Protezione endpoint /api/cron per scheduler esterni', 'facoltativa'],
+  ['TWELVEDATA_API_KEY', 'Twelve Data (gratuita): azioni ed ETF USA, metalli preziosi', 'consigliata'],
   ['FRED_API_KEY', 'FRED (gratuita): tassi Fed, inflazione, lavoro e spread USA', 'consigliata'],
   ['MYMEMORY_EMAIL', 'Alza la quota di traduzione gratuita a 50.000 caratteri/giorno', 'facoltativa'],
   ['VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY', 'Chiavi notifiche push (generate automaticamente se assenti)', 'facoltativa'],
